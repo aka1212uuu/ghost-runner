@@ -1,0 +1,56 @@
+name: Build GhostRunner iOS 18+ Clean IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: Compile & Package GhostRunner.ipa
+    runs-on: macos-14  # Apple Silicon M1 Runner with Xcode 15/16 and iOS 18 SDK
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Inspect Environment & Select Xcode
+        run: |
+          echo "=== Xcode Available ==="
+          ls -d /Applications/Xcode*.app || true
+          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Compile WebDriverAgentRunner (Release)
+        run: |
+          xcodebuild build-for-testing \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            -derivedDataPath ./build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Assemble & Package Clean IPA
+        run: |
+          mkdir -p Payload
+          RUNNER_APP=$(find ./build -name "WebDriverAgentRunner-Runner.app" -type d | head -n 1)
+          if [ -z "$RUNNER_APP" ]; then
+            echo "[-] Error: WebDriverAgentRunner-Runner.app not found in build directory!"
+            exit 1
+          fi
+          echo "[+] Found compiled app bundle at: $RUNNER_APP"
+          cp -R "$RUNNER_APP" Payload/
+          
+          # Compress into IPA archive preserving symlinks
+          zip -r -y GhostRunner_iOS18.ipa Payload
+          echo "[✓] GhostRunner_iOS18.ipa assembled successfully!"
+          ls -lh GhostRunner_iOS18.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GhostRunner_iOS18_Clean
+          path: GhostRunner_iOS18.ipa
+          if-no-files-found: error
