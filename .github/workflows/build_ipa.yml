@@ -18,7 +18,7 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
 
-      - name: Compile WebDriverAgentRunner with Ad-Hoc Signing
+      - name: Compile WebDriverAgentRunner (Release)
         run: |
           xcodebuild build-for-testing \
             -project WebDriverAgent.xcodeproj \
@@ -26,9 +26,9 @@ jobs:
             -destination "generic/platform=iOS" \
             -configuration Release \
             -derivedDataPath ./build \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Assemble & Deep Sign Clean IPA
@@ -42,15 +42,15 @@ jobs:
           echo "[+] Found compiled app bundle at: $RUNNER_APP"
           cp -R "$RUNNER_APP" Payload/
           
-          # Crucial: Deep ad-hoc sign every binary so that dyld mapped file cdhash checks pass 100% on iOS!
-          echo "[*] Applying deep ad-hoc codesigning to all binaries and plugins..."
-          find Payload -name "*.dylib" -exec codesign --force --sign - {} \; || true
-          find Payload -name "*.framework" -exec codesign --force --sign - {} \; || true
-          find Payload -name "*.xctest" -exec codesign --force --deep --sign - {} \; || true
-          find Payload -name "*.app" -exec codesign --force --deep --sign - {} \; || true
+          # Use macOS native /usr/bin/codesign to inject ad-hoc signatures (cdhash) into all nested binaries
+          echo "[*] Injecting ad-hoc Mach-O cdhashes with /usr/bin/codesign..."
+          find Payload -name "*.dylib" -exec /usr/bin/codesign --force --sign - {} \; || true
+          find Payload -name "*.framework" -exec /usr/bin/codesign --force --sign - {} \; || true
+          find Payload -name "*.xctest" -exec /usr/bin/codesign --force --deep --sign - {} \; || true
+          find Payload -name "*.app" -exec /usr/bin/codesign --force --deep --sign - {} \; || true
           
-          echo "[*] Verifying nested xctest signature:"
-          codesign -dvv Payload/WebDriverAgentRunner-Runner.app/PlugIns/WebDriverAgentRunner.xctest || true
+          echo "[*] Verifying xctest signature and cdhash:"
+          /usr/bin/codesign -dvvv Payload/WebDriverAgentRunner-Runner.app/PlugIns/WebDriverAgentRunner.xctest || true
 
           # Compress into IPA archive preserving symlinks
           zip -r -y GhostRunner_iOS18.ipa Payload
