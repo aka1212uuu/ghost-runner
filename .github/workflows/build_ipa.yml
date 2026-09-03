@@ -49,7 +49,7 @@ jobs:
           ls -lh GhostRunner_iOS18.ipa
 
       - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: GhostRunner_iOS18_Clean
           path: GhostRunner_iOS18.ipa
